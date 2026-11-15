@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Uetliberg Wind Lab</title>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+<style>
+  :root {
+    --bg0: #070b12; --bg1: #16263a;
+    --card: rgba(13, 19, 29, 0.74); --line: rgba(255, 255, 255, 0.09);
+    --text: #e8eef6; --dim: #93a3b8; --accent: #7fd6ff; --warm: #ffb65c;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body {
+    font: 12px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text);
+    background: radial-gradient(120% 90% at 55% 35%, var(--bg1) 0%, #0d1622 55%, var(--bg0) 100%);
+    -webkit-font-smoothing: antialiased;
+  }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    backdrop-filter: blur(16px) saturate(140%); -webkit-backdrop-filter: blur(16px) saturate(140%);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  }
+  h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+  h1 span { font-weight: 300; color: var(--accent); }
+  h2 { font-size: 9.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin: 0 0 9px; }
+  .sub { color: var(--dim); margin: 2px 0 0; font-size: 11px; }
+
+  #panel { position: fixed; top: 16px; left: 16px; bottom: 16px; width: 304px; padding: 18px 18px 8px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #2c3a4d transparent; }
+  #panel section { padding: 15px 0 14px; border-top: 1px solid var(--line); }
+  #panel header { padding-bottom: 14px; }
+
+  .windrow { display: flex; align-items: center; gap: 14px; }
+  #compass { width: 120px; height: 120px; flex: none; cursor: grab; touch-action: none; user-select: none; outline: none; }
+  #compass:active { cursor: grabbing; }
+  #compass:focus-visible .ring { stroke: var(--accent); }
+  #compass .ring { fill: rgba(255,255,255,0.03); stroke: rgba(255,255,255,0.16); }
+  #compass .tick { stroke: rgba(255,255,255,0.28); stroke-width: 1; }
+  #compass .tick.major { stroke: rgba(255,255,255,0.6); stroke-width: 1.5; }
+  #compass text { fill: var(--dim); font-size: 11px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+  #compass text.n { fill: var(--warm); }
+  #compass .arrow line { stroke: var(--accent); stroke-width: 4; stroke-linecap: round; }
+  #compass .arrow polygon { fill: var(--accent); }
+  #compass .arrow circle { fill: #0d131d; stroke: var(--accent); stroke-width: 3; }
+  .windread { flex: 1; min-width: 0; }
+  .windread .big { font-size: 27px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+  .windread .deg { font-size: 13.5px; color: var(--accent); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .lbl { color: var(--dim); font-size: 10px; }
+
+  .row { display: flex; justify-content: space-between; align-items: baseline; margin: 12px 0 4px; }
+  .row output { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .row output small { color: var(--dim); font-weight: 400; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; background: transparent; margin: 0; cursor: pointer; }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.16); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; margin-top: -6px; background: var(--accent); border: 3px solid #0d131d; box-shadow: 0 0 0 1px var(--accent); }
+  input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.16); }
+  input[type=range]::-moz-range-thumb { width: 11px; height: 11px; border-radius: 50%; background: var(--accent); border: 3px solid #0d131d; box-shadow: 0 0 0 1px var(--accent); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button {
+    font: inherit; font-size: 11px; color: var(--text); background: rgba(255,255,255,0.05); border: 1px solid var(--line);
+    padding: 5px 10px; border-radius: 999px; cursor: pointer; transition: background .15s, border-color .15s, color .15s;
+  }
+  .chips button:hover { background: rgba(255,255,255,0.1); }
+  .chips button.on { background: rgba(127,214,255,0.16); border-color: rgba(127,214,255,0.6); color: #dff4ff; }
+  .chips.seg { flex-wrap: nowrap; gap: 0; }
+  .chips.seg button { flex: 1; border-radius: 0; padding: 6px 4px; margin-left: -1px; }
+  .chips.seg button:first-child { border-radius: 9px 0 0 9px; margin-left: 0; }
+  .chips.seg button:last-child { border-radius: 0 9px 9px 0; }
+  .hint { color: var(--dim); font-size: 10.5px; margin: 8px 0 0; }
+
+  .legend { margin-top: 10px; }
+  .legend .bar { height: 7px; border-radius: 4px; }
+  .legend .ends { display: flex; justify-content: space-between; color: var(--dim); font-size: 10px; margin-top: 3px; }
+  .legend .keys { display: flex; gap: 12px; flex-wrap: wrap; color: var(--dim); font-size: 10.5px; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+  details { border-top: 1px solid var(--line); padding: 12px 0; color: var(--dim); font-size: 11px; }
+  details summary { cursor: pointer; color: var(--text); font-weight: 600; font-size: 11px; }
+  details p { margin: 8px 0 0; }
+  details b { color: var(--text); font-weight: 600; }
+
+  #probe { position: fixed; top: 16px; right: 16px; width: 268px; padding: 14px 16px; }
+  #probe .title { display: flex; justify-content: space-between; align-items: baseline; }
+  #probe .title b { font-size: 12.5px; }
+  #probe table { width: 100%; border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  #probe th { text-align: right; font-weight: 500; color: var(--dim); font-size: 9.5px; padding: 2px 0; }
+  #probe th:first-child, #probe td:first-child { text-align: left; color: var(--dim); }
+  #probe td { text-align: right; padding: 3px 0; border-top: 1px solid var(--line); white-space: nowrap; }
+  #probe .arr { display: inline-block; width: 12px; text-align: center; color: var(--accent); }
+  .up { color: #ffc55e; } .down { color: #6fb4ff; }
+  .badge { display: inline-block; margin-top: 9px; padding: 3px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 600; }
+  .badge.ok { background: rgba(110,255,170,0.14); color: #8dffbf; }
+  .badge.lee { background: rgba(255,70,130,0.18); color: #ff8fb3; }
+  .badge.calm { background: rgba(255,255,255,0.08); color: var(--dim); }
+  .badge.strong { background: rgba(255,170,60,0.18); color: #ffc27a; }
+
+  #sectionCard { position: fixed; right: 16px; bottom: 16px; width: min(600px, calc(100vw - 368px)); padding: 12px 14px 10px; }
+  #sectionCard .title { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+  #sectionCard .title b { font-size: 11.5px; }
+  #section { width: 100%; height: 200px; display: block; }
+  #sectionCard .keys { display: flex; gap: 14px; flex-wrap: wrap; color: var(--dim); font-size: 10px; margin-top: 4px; }
+  .dash { display: inline-block; width: 16px; border-top: 2px dashed #78ffaa; margin-right: 5px; vertical-align: 3px; }
+
+  /* collapsible cards */
+  .fold { position: absolute; top: 11px; right: 11px; width: 24px; height: 24px; padding: 0; border-radius: 8px; cursor: pointer;
+    background: rgba(255,255,255,0.05); border: 1px solid var(--line); transition: background .15s; }
+  .fold:hover { background: rgba(255,255,255,0.13); }
+  .fold::before { content: ""; position: absolute; left: 8px; top: 6px; width: 6px; height: 6px; border-right: 1.6px solid var(--text); border-bottom: 1.6px solid var(--text);
+    transform: rotate(45deg); transition: transform .2s, top .2s; }
+  .collapsed .fold::before { transform: rotate(-135deg); top: 10px; }
+  #panel header, #probe .title, #sectionCard .title { padding-right: 32px; }
+  #panel.collapsed { bottom: auto; overflow: hidden; padding-bottom: 16px; }
+  #panel.collapsed header { padding-bottom: 0; }
+  #panel.collapsed section, #panel.collapsed details { display: none; }
+  #probe.collapsed table, #probe.collapsed .badge { display: none; }
+  #sectionCard.collapsed #section, #sectionCard.collapsed .keys { display: none; }
+  #sectionCard.collapsed .title { margin-bottom: 0; }
+
+  #labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .place { position: absolute; left: 0; top: 0; white-space: nowrap; font-size: 10.5px; font-weight: 600; color: #f2f6fb;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.7); will-change: transform; }
+  .place::before { content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #fff; margin-right: 6px; vertical-align: 2px; box-shadow: 0 0 0 2px rgba(0,0,0,0.35); }
+  .place small { font-weight: 400; color: #c3d0e0; margin-left: 4px; }
+  .place.north { color: var(--warm); font-size: 12.5px; font-weight: 800; }
+  .place.north::before { display: none; }
+
+  #status { position: fixed; top: 52px; left: 50%; transform: translateX(-50%); padding: 8px 16px; border-radius: 999px; display: flex; align-items: center; gap: 10px; font-size: 11px; transition: opacity .4s; }
+  #status.hide { opacity: 0; pointer-events: none; }
+  #status .pbar { width: 90px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.14); overflow: hidden; }
+  #status .pbar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  #tip { position: fixed; left: 336px; top: 20px; color: rgba(170,185,205,0.75); font-size: 10.5px; text-shadow: 0 1px 3px #000; max-width: calc(100vw - 660px); }
+  #error { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; padding: 30px; text-align: center; color: #ffb4b4; }
+
+  @media (max-width: 900px) {
+    #panel { width: 270px; } #probe { display: none; } #tip { display: none; }
+    #sectionCard { width: calc(100vw - 318px); }
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="labels"></div>
+
+<aside id="panel" class="card">
+  <button class="fold" type="button" aria-label="Collapse controls"></button>
+  <header>
+    <h1>Uetliberg <span>Wind Lab</span></h1>
+    <p class="sub">Airflow, lift &amp; lee explorer · Zürich</p>
+  </header>
+
+  <section>
+    <h2>Wind</h2>
+    <div class="windrow">
+      <svg id="compass" viewBox="-100 -100 200 200" tabindex="0" role="slider" aria-label="Wind direction (from)" aria-valuemin="0" aria-valuemax="359"></svg>
+      <div class="windread">
+        <div class="lbl">wind from</div>
+        <div class="big" id="dirName">NE</div>
+        <div class="deg" id="dirDeg">50°</div>
+      </div>
+    </div>
+    <div class="row"><label for="speed">Speed <span class="lbl">· free stream above the ridge</span></label><output id="speedOut"></output></div>
+    <input type="range" id="speed" min="0" max="60" step="1">
+    <div class="chips" id="presets" style="margin-top:12px">
+      <button data-dir="50" data-speed="20">Bise</button>
+      <button data-dir="60" data-speed="38">Strong Bise</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Air mass</h2>
+    <div class="chips seg" id="stability">
+      <button data-v="stable">Stable</button><button data-v="neutral">Neutral</button><button data-v="unstable">Unstable</button>
+    </div>
+    <p class="hint" id="stabHint"></p>
+  </section>
+
+  <section>
+    <h2>Ground overlay</h2>
+    <div class="chips" id="overlay">
+      <button data-v="lee">Lee &amp; turbulence</button><button data-v="soar">Soaring band</button>
+      <button data-v="lift">Lift / sink</button><button data-v="speed">Wind speed</button><button data-v="none">Aerial only</button>
+    </div>
+    <div class="legend" id="ovLegend"></div>
+  </section>
+
+  <section>
+    <h2>Airflow</h2>
+    <div class="chips" id="pcolor">
+      <button data-v="lift">Lift / sink</button><button data-v="speed">Speed</button><button data-v="turb">Turbulence</button>
+    </div>
+    <div class="legend" id="pLegend"></div>
+    <div class="row"><label for="count">Tracers</label><output id="countOut"></output></div>
+    <input type="range" id="count" min="0" max="12000" step="500">
+    <div class="row"><label for="maxAgl">Released up to</label><output id="aglOut"></output></div>
+    <input type="range" id="maxAgl" min="40" max="1000" step="20">
+  </section>
+
+  <details>
+    <summary>About the model</summary>
+    <p><b>Flow:</b> a mass-consistent diagnostic wind model (same family as WindNinja). A log-profile wind is forced to flow over and around the real terrain on a 160 × 160 × 44 grid (≈ 88 m cells, 25 m layers); it is solved in your browser. Direction and speed changes are instant because the solution is linear in the inflow.</p>
+    <p><b>Lee:</b> such models cannot produce flow separation, so lee zones are added geometrically: a point is sheltered when upwind terrain rises above it steeper than about 1:16 (full wake at 1:4, reaching ≈ 2.3 km downwind). There the mean wind is reduced and tracers get turbulent.</p>
+    <p><b>Soaring band:</b> where air rises faster than a glider sinks (1.1 m/s) somewhere between 25 and 190 m above ground, outside the lee. Orange: lift is there but the wind exceeds 33 km/h.</p>
+    <p><b>Not included:</b> thermals, valley winds, rotors, gust fronts, time evolution. It is a visual aid for understanding terrain flow — <b>not a flight-planning tool</b>.</p>
+    <p>Elevation: Mapzen Terrain Tiles. Imagery: © swisstopo.</p>
+  </details>
+</aside>
+
+<div id="probe" class="card"><button class="fold" type="button" aria-label="Collapse probe"></button><div id="probeBody"></div></div>
+
+<div id="sectionCard" class="card">
+  <button class="fold" type="button" aria-label="Collapse cross-section"></button>
+  <div class="title"><b>Cross-section along the wind</b><span class="lbl" id="sectionSub"></span></div>
+  <canvas id="section"></canvas>
+  <div class="keys">
+    <span><i class="sw" style="background:#ffb53e"></i>rising air</span>
+    <span><i class="sw" style="background:#4b96ff"></i>sinking air</span>
+    <span><i class="sw" style="background:#cd3c96"></i>lee / turbulent</span>
+    <span><i class="dash"></i>glider stays up (&gt; 1.1 m/s)</span>
+  </div>
+</div>
+
+<div id="tip">Drag to orbit · right-drag to pan · scroll to zoom · click the terrain to move the probe</div>
+<div id="status" class="card"><span id="statusText">Loading terrain…</span><div class="pbar"><i id="statusBar"></i></div></div>
+<div id="error"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
