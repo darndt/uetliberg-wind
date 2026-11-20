@@ -18,6 +18,7 @@ const PLACES = [
   ['Uetliberg Kulm', 47.3495, 8.4915], ['Felsenegg', 47.3098, 8.5086], ['Zürich HB', 47.3779, 8.5403],
   ['Zürichberg', 47.383, 8.568], ['Albisgüetli', 47.3525, 8.5115], ['Zürichsee', 47.336, 8.552],
 ];
+const TAKEOFF = ['Take-off', 47.32260, 8.50072];   // paragliding launch
 
 const state = { dir: 50, speed: 20, stability: 'neutral', overlay: 'soar', pcolor: 'lift', count: 6000, maxAgl: 300, exag: 1, probe: { x: 0, n: 0 } };
 const $ = (id) => document.getElementById(id);
@@ -29,9 +30,9 @@ const windName = (d) => WINDS[Math.round(d / 22.5) % 16];
 for (const id of ['panel', 'probe', 'sectionCard']) {
   const card = $(id), btn = card.querySelector('.fold'), key = 'windlab.collapsed.' + id;
   const set = (c) => { card.classList.toggle('collapsed', c); btn.setAttribute('aria-expanded', String(!c)); };
-  let saved = false;
-  try { saved = localStorage.getItem(key) === '1'; } catch { /* storage unavailable */ }
-  set(saved);
+  let saved = null;
+  try { saved = localStorage.getItem(key); } catch { /* storage unavailable */ }
+  set(saved === null ? id === 'sectionCard' : saved === '1');   // cross-section starts collapsed
   btn.addEventListener('click', () => {
     const c = !card.classList.contains('collapsed');
     set(c);
@@ -127,6 +128,12 @@ async function main() {
   pin.add(new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 420, 8).translate(0, 210, 0), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 })));
   pin.add(new THREE.Mesh(new THREE.SphereGeometry(42, 16, 12).translate(0, 420, 0), new THREE.MeshBasicMaterial({ color: 0xffffff })));
   world.add(pin);
+  { // take-off marker: orange sphere resting on the surface
+    const [tx, tn] = T.fromLatLon(TAKEOFF[1], TAKEOFF[2]);
+    const mk = new THREE.Mesh(new THREE.SphereGeometry(40, 20, 14), new THREE.MeshBasicMaterial({ color: 0xffb65c }));
+    mk.position.set(tx, T.hAt(tx, tn) + 40, -tn);
+    world.add(mk);
+  }
   const NLINE = 140;
   const lineGeo = new THREE.BufferGeometry();
   lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(NLINE * 3), 3));
@@ -152,7 +159,7 @@ async function main() {
   function updateProbeCard() {
     const { x, n } = state.probe, h = T.hAt(x, n);
     let near = null, nd = 700;
-    for (const [name, lat, lon] of PLACES) {
+    for (const [name, lat, lon] of [...PLACES, TAKEOFF]) {
       const [px, pn] = T.fromLatLon(lat, lon), dd = Math.hypot(px - x, pn - n);
       if (dd < nd) { nd = dd; near = name; }
     }
@@ -191,6 +198,10 @@ async function main() {
   });
   { const el = document.createElement('div'); el.className = 'place north'; el.textContent = 'N'; $('labels').appendChild(el);
     labels.push({ el, x: 0, n: T.half + 350, h: T.hAt(0, T.half) }); }
+  { const [x, n] = T.fromLatLon(TAKEOFF[1], TAKEOFF[2]), h = T.hAt(x, n);
+    const el = document.createElement('div'); el.className = 'place takeoff';
+    el.innerHTML = `${TAKEOFF[0]}<small>${Math.round(h)} m</small>`; $('labels').appendChild(el);
+    labels.push({ el, x, n, h: h + 110 }); }
   const v3 = new THREE.Vector3();
   function updateLabels(w, h) {
     for (const l of labels) {
@@ -320,8 +331,8 @@ async function main() {
 
   // ---------- camera ----------
   const h0 = T.hAt(state.probe.x, state.probe.n);
-  controls.target.set(state.probe.x + 1500, (h0 - 300) * state.exag, -state.probe.n + 400);
-  camera.position.set(state.probe.x + 10500, 8200, -state.probe.n - 8200);
+  controls.target.set(state.probe.x + 1500, (h0 - 300) * state.exag, -state.probe.n - 400);
+  camera.position.set(state.probe.x + 10500, 8200, -state.probe.n + 8200);   // view from the SE
 
   let W = 0, H = 0;
   function resize() {
